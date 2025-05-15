@@ -84,7 +84,7 @@ def index():
             try:
                 if "{" in reply:
                     filters = eval(reply.strip().split('\n')[-1])
-                    results = mock_scraper(filters)
+                    results = real_scraper(filters)
                 else:
                     results = []
             except:
@@ -111,3 +111,97 @@ def mock_scraper(filters):
         "url": "https://voorbeeld.autino.nl/volvo-xc40",
     }
     return [voorbeeld_auto] if filters else []
+
+
+
+import requests
+from bs4 import BeautifulSoup
+import re
+
+def parse_km(km_str):
+    km_str = km_str.replace('.', '').replace(',', '').replace('km', '').strip()
+    match = re.search(r"(\d+)", km_str)
+    return int(match.group(1)) if match else 0
+
+def search_vaartland():
+    url = "https://www.vaartland.nl/voorraad"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    results = []
+    for card in soup.select("div.vehicle-card")[:10]:
+        title = card.select_one(".vehicle-card__title")
+        price = card.select_one(".vehicle-card__price")
+        km = card.select_one(".vehicle-card__mileage")
+        link = card.select_one("a")
+        img = card.select_one("img")
+        if title and price and km and link:
+            results.append({
+                "title": title.text.strip(),
+                "price": price.text.strip(),
+                "km": km.text.strip(),
+                "url": "https://www.vaartland.nl" + link["href"],
+                "img": img["src"] if img and img.has_attr("src") else ""
+            })
+    return results
+
+def search_broekhuis():
+    url = 'https://www.broekhuis.nl/volvo/occasions/volvo-selekt'
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, 'html.parser')
+    results = []
+    for card in soup.select('div.vehicle')[:10]:
+        title = card.select_one('.vehicle__title')
+        price = card.select_one('.vehicle__price')
+        km = card.select_one('.vehicle__meta-item--mileage')
+        link = card.select_one('a')
+        img = card.select_one('img')
+        if title and price and km and link:
+            results.append({
+                'title': title.text.strip(),
+                'price': price.text.strip(),
+                'km': km.text.strip(),
+                'url': 'https://www.broekhuis.nl' + link['href'],
+                'img': img['src'] if img else ''
+            })
+    return results
+
+def search_volvo():
+    url = 'https://selekt.volvocars.nl/nl-nl/store/'
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, 'html.parser')
+    results = []
+    for card in soup.select('div.result')[:10]:
+        title = card.select_one('.title')
+        price = card.select_one('.price')
+        km = card.select_one('.mileage')
+        link = card.select_one('a')
+        img = card.select_one('img')
+        if title and price and km and link:
+            results.append({
+                'title': title.text.strip(),
+                'price': price.text.strip(),
+                'km': km.text.strip(),
+                'url': 'https://selekt.volvocars.nl' + link['href'],
+                'img': img['src'] if img else ''
+            })
+    return results
+
+def apply_filters(cars, filters):
+    result = []
+    for car in cars:
+        title = car['title'].lower()
+        km = parse_km(car['km'])
+        if filters.get('merk') and filters['merk'].lower() not in title:
+            continue
+        if filters.get('brandstof') and filters['brandstof'].lower() not in title:
+            continue
+        if filters.get('transmissie') and filters['transmissie'].lower() not in title:
+            continue
+        if filters.get('kilometerstand') and km > int(filters['kilometerstand']):
+            continue
+        result.append(car)
+    return result
+
+def real_scraper(filters):
+    all_cars = search_vaartland() + search_broekhuis() + search_volvo()
+    return apply_filters(all_cars, filters)
