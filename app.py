@@ -205,7 +205,7 @@ def index():
         filters = extract_filters(query)
         all_cars = search_broekhuis() + search_volvo() + search_vaartland()
         results = apply_filters(all_cars, filters) if filters else all_cars
-    return render_template_string(HTML_TEMPLATE, results=results, filters=filters)
+    return render_template_string(HTML_TEMPLATE, results=results, filters=filters if 'filters' in locals() else {})
 
 if __name__ == '__main__':
     app.run(debug=True)
