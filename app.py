@@ -1,10 +1,13 @@
-import openai
+import os
 from flask import Flask, render_template_string, request, session
+import openai
 import requests
 from bs4 import BeautifulSoup
 import re
+from dotenv import load_dotenv
 
-openai.api_key = "YOUR_OPENAI_API_KEY"
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
@@ -64,7 +67,7 @@ HTML_TEMPLATE = """<!doctype html>
 
     <hr style="margin-top:40px;">
     <h3>Hoe werkt het?</h3>
-    <p>Vertel ons wat voor auto je zoekt in gewone taal. Beantwoord drie korte vragen zodat we je beter begrijpen. Daarna laten we je direct auto's zien die bij je passen, uit betrouwbare Nederlandse voorraad.</p>
+    <p>Vertel ons wat voor auto je zoekt in gewone taal. Daarna laten we je direct auto's zien die bij je passen, uit betrouwbare Nederlandse voorraad.</p>
     <p style="text-align:center; font-size:0.8em; color:#888; margin-top:60px;">Made in Amsterdam XXX</p>
 </body>
 </html>"""
