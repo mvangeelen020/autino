@@ -56,6 +56,8 @@ START_PROMPT = [
 ]
 
 @app.route("/", methods=["GET", "POST"])
+
+@app.route("/", methods=["GET", "POST"])
 def index():
     if "messages" not in session:
         session["messages"] = START_PROMPT.copy()
@@ -66,7 +68,6 @@ def index():
         user_input = request.form.get("message", "")
         messages.append({"role": "user", "content": user_input})
 
-        
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-4",
@@ -86,10 +87,11 @@ def index():
         except Exception as e:
             messages.append({"role": "assistant", "content": f"Er ging iets mis met de AI: {e}"})
             results = []
+    else:
+        results = []
 
-
-return render_template_string(HTML_TEMPLATE, messages=messages, results=results if "results" in locals() else [])
-
+    session["messages"] = messages
+    return render_template_string(HTML_TEMPLATE, messages=messages, results=results)
 if __name__ == "__main__":
     app.run(debug=True)
 
