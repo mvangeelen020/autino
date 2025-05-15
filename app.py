@@ -26,7 +26,39 @@ HTML_TEMPLATE = """<!doctype html>
 <body>
     <img src="/static/autino_logo.png" class="logo" />
     <h1>Zoek een auto met AI</h1>
-    <form method="post">
+    
+{% if not filters %}
+<h2>Korte vragen om je beter te helpen</h2>
+<form method="post">
+    <label>Heb je kinderen of vervoer je vaak meerdere mensen?</label><br>
+    <select name="q1">
+        <option value="">--</option>
+        <option value="ja">Ja</option>
+        <option value="nee">Nee</option>
+    </select><br><br>
+
+    <label>Gebruik je de auto vooral voor stad, snelweg of lange ritten?</label><br>
+    <select name="q2">
+        <option value="">--</option>
+        <option value="stad">Stad</option>
+        <option value="snelweg">Snelweg</option>
+        <option value="lange ritten">Lange ritten</option>
+    </select><br><br>
+
+    <label>Heb je voorkeur voor type auto?</label><br>
+    <select name="q3">
+        <option value="">--</option>
+        <option value="stationwagen">Stationwagen</option>
+        <option value="hatchback">Hatchback</option>
+        <option value="SUV">SUV</option>
+        <option value="maakt niet uit">Maakt niet uit</option>
+    </select><br><br>
+
+    <button type="submit">Doorgaan</button>
+</form>
+{% endif %}
+
+<form method="post">
         <input name="query" style="width:100%; max-width:400px;" placeholder="Bijv: Ik zoek een elektrische Kia met automaat" />
         <button type="submit">Zoeken</button>
     </form>
@@ -55,6 +87,7 @@ HTML_TEMPLATE = """<!doctype html>
         </body>
 </html>"""
 
+
 def extract_filters(query):
     prompt = f'''
 Je bent een AI die filters uit een autospeficatie haalt in natuurlijke taal.
@@ -70,9 +103,10 @@ Output:
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        filters = eval(response['choices'][0]['message']['content'])
-        return filters
-    except:
+        output = response['choices'][0]['message']['content']
+        filters = eval(output) if "{" in output else {}
+        return filters if isinstance(filters, dict) else {}
+    except Exception as e:
         return {}
 
 def parse_km(km_str):
@@ -164,11 +198,14 @@ def search_volvo():
 def index():
     results = []
     if request.method == 'POST':
+        q1 = request.form.get('q1', '')
+        q2 = request.form.get('q2', '')
+        q3 = request.form.get('q3', '')
         query = request.form['query']
         filters = extract_filters(query)
         all_cars = search_broekhuis() + search_volvo() + search_vaartland()
-        results = apply_filters(all_cars, filters)
-    return render_template_string(HTML_TEMPLATE, results=results)
+        results = apply_filters(all_cars, filters) if filters else all_cars
+    return render_template_string(HTML_TEMPLATE, results=results, filters=filters)
 
 if __name__ == '__main__':
     app.run(debug=True)
