@@ -66,13 +66,7 @@ def index():
         user_input = request.form.get("message", "")
         messages.append({"role": "user", "content": user_input})
 
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=messages,
-                temperature=0.7,
-            )
-            
+        
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-4",
@@ -87,15 +81,14 @@ def index():
                     results = real_scraper(filters)
                 else:
                     results = []
-            except:
+            except Exception as e:
                 results = []
-
         except Exception as e:
             messages.append({"role": "assistant", "content": f"Er ging iets mis met de AI: {e}"})
+            results = []
 
-        session["messages"] = messages
 
-    return render_template_string(HTML_TEMPLATE, messages=messages, results=results if "results" in locals() else [])
+return render_template_string(HTML_TEMPLATE, messages=messages, results=results if "results" in locals() else [])
 
 if __name__ == "__main__":
     app.run(debug=True)
