@@ -42,8 +42,17 @@ HTML_TEMPLATE = """<!doctype html>
         </div>
         {% endfor %}
     </div>
+    
+    {% else %}
+    <p>Geen auto's gevonden op basis van je zoekopdracht. Probeer iets algemeners zoals "elektrische auto onder 100.000 km".</p>
     {% endif %}
-</body>
+        
+
+    <hr style="margin-top:40px;">
+    <h3>Hoe werkt het?</h3>
+    <p>Vertel ons wat voor auto je zoekt in gewone taal. Daarna zoeken wij in voorraad van betrouwbare Nederlandse sites zoals Broekhuis, Vaartland en Volvo Cars. Je krijgt direct de best passende auto's te zien.</p>
+    <p style="text-align:center; font-size:0.8em; color:#888; margin-top:60px;">Made in Amsterdam XXX</p>
+        </body>
 </html>"""
 
 def extract_filters(query):
