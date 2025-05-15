@@ -1,211 +1,113 @@
 import os
-from flask import Flask, render_template_string, request
+from flask import Flask, request, render_template_string, session
 import openai
-import requests
-from bs4 import BeautifulSoup
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
+app.secret_key = "supersecretkey"
 
-HTML_TEMPLATE = """<!doctype html>
+HTML_TEMPLATE = """
+<!DOCTYPE html>
 <html>
 <head>
-    <title>Autino – AutoZoeker AI</title>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Autino Conversatie</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f4f4f4; }
-        h1 { color: #1e3a8a; }
-        form, .result { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        img.logo { width: 150px; }
+        body { font-family: Arial; max-width: 600px; margin: auto; padding: 20px; background:#f4f4f4; }
+        .chat { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .user { font-weight: bold; margin-top: 10px; }
+        .ai { margin-bottom: 15px; }
+        input[type=text] { width: 100%; padding: 10px; margin-top: 10px; }
+        button { margin-top: 10px; padding: 10px 20px; background: #1e3a8a; color: white; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <img src="/static/autino_logo.png" class="logo" />
-    <h1>Zoek een auto met AI</h1>
-    
-{% if not filters %}
-<h2>Korte vragen om je beter te helpen</h2>
-<form method="post">
-    <label>Heb je kinderen of vervoer je vaak meerdere mensen?</label><br>
-    <select name="q1">
-        <option value="">--</option>
-        <option value="ja">Ja</option>
-        <option value="nee">Nee</option>
-    </select><br><br>
-
-    <label>Gebruik je de auto vooral voor stad, snelweg of lange ritten?</label><br>
-    <select name="q2">
-        <option value="">--</option>
-        <option value="stad">Stad</option>
-        <option value="snelweg">Snelweg</option>
-        <option value="lange ritten">Lange ritten</option>
-    </select><br><br>
-
-    <label>Heb je voorkeur voor type auto?</label><br>
-    <select name="q3">
-        <option value="">--</option>
-        <option value="stationwagen">Stationwagen</option>
-        <option value="hatchback">Hatchback</option>
-        <option value="SUV">SUV</option>
-        <option value="maakt niet uit">Maakt niet uit</option>
-    </select><br><br>
-
-    <button type="submit">Doorgaan</button>
-</form>
+    <h1>Autino – AI Auto Advies</h1>
+    <div class="chat">
+        {% for m in messages %}
+            <div class="{{ m.role }}">{{ m.role.capitalize() }}: {{ m.content }}</div>
+        {% endfor %}
+        
+{% if results %}
+    <h2>Suggesties op basis van jouw antwoorden</h2>
+    {% for r in results %}
+        <div style="margin:10px 0;padding:10px;border:1px solid #ccc;border-radius:6px;">
+            <a href="{{ r.url }}" target="_blank"><strong>{{ r.title }}</strong></a><br>
+            {{ r.price }} – {{ r.km }}
+        </div>
+    {% endfor %}
 {% endif %}
 
 <form method="post">
-        <input name="query" style="width:100%; max-width:400px;" placeholder="Bijv: Ik zoek een elektrische Kia met automaat" />
-        <button type="submit">Zoeken</button>
-    </form>
-
-    {% if results %}
-    <div>
-        <h2>Resultaten</h2>
-        {% for r in results %}
-        <div class="result">
-            <img src="{{ r.img }}" alt="auto" width="200"/><br>
-            <a href="{{ r.url }}" target="_blank">{{ r.title }}</a><br>
-            {{ r.price }} – {{ r.km }}
-        </div>
-        {% endfor %}
+            <input type="text" name="message" placeholder="Typ hier je antwoord..." autofocus required />
+            <button type="submit">Verstuur</button>
+        </form>
     </div>
-    
-    {% else %}
-    <p>Geen auto's gevonden op basis van je zoekopdracht. Probeer iets algemeners zoals "elektrische auto onder 100.000 km".</p>
-    {% endif %}
-        
+</body>
+</html>
+"""
 
-    <hr style="margin-top:40px;">
-    <h3>Hoe werkt het?</h3>
-    <p>Vertel ons wat voor auto je zoekt in gewone taal. Daarna zoeken wij in voorraad van betrouwbare Nederlandse sites zoals Broekhuis, Vaartland en Volvo Cars. Je krijgt direct de best passende auto's te zien.</p>
-    <p style="text-align:center; font-size:0.8em; color:#888; margin-top:60px;">Made in Amsterdam XXX</p>
-        </body>
-</html>"""
+START_PROMPT = [
+    {"role": "system", "content": "Je bent een behulpzame Nederlandse AI die mensen helpt bij het vinden van een geschikte auto op basis van hun situatie. Stel stapsgewijs maximaal 3 vragen en geef daarna een suggestie voor zoekfilters in JSON-formaat."},
+    {"role": "assistant", "content": "Welkom bij Autino! Ik help je de juiste auto te vinden. Waarvoor wil je de auto voornamelijk gebruiken? Voor in de stad, lange ritten, of iets anders?"}
+]
 
-
-def extract_filters(query):
-    prompt = f'''
-Je bent een AI die filters uit een autospeficatie haalt in natuurlijke taal.
-Haal merk, brandstof, transmissie en max kilometerstand uit deze tekst.
-Antwoord als JSON met keys: merk, brandstof, transmissie, kilometerstand.
-
-Input: "{query}"
-Output:
-'''
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        output = response['choices'][0]['message']['content']
-        filters = eval(output) if "{" in output else {}
-        return filters if isinstance(filters, dict) else {}
-    except Exception as e:
-        return {}
-
-def parse_km(km_str):
-    km_str = km_str.replace('.', '').replace('km', '').strip()
-    match = re.search(r"(\d+)", km_str)
-    return int(match.group(1)) if match else 0
-
-def apply_filters(cars, filters):
-    result = []
-    for car in cars:
-        title = car['title'].lower()
-        km = parse_km(car['km'])
-        if filters.get('merk') and filters['merk'].lower() not in title:
-            continue
-        if filters.get('brandstof') and filters['brandstof'].lower() not in title:
-            continue
-        if filters.get('transmissie') and filters['transmissie'].lower() not in title:
-            continue
-        if filters.get('kilometerstand') and km > int(filters['kilometerstand']):
-            continue
-        result.append(car)
-    return result
-
-def search_broekhuis():
-    url = 'https://www.broekhuis.nl/volvo/occasions/volvo-selekt'
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    results = []
-    for card in soup.select('div.vehicle')[:10]:
-        title = card.select_one('.vehicle__title')
-        price = card.select_one('.vehicle__price')
-        km = card.select_one('.vehicle__meta-item--mileage')
-        link = card.select_one('a')
-        img = card.select_one('img')
-        if title and price and km and link:
-            results.append({
-                'title': title.text.strip(),
-                'price': price.text.strip(),
-                'km': km.text.strip(),
-                'url': 'https://www.broekhuis.nl' + link['href'],
-                'img': img['src'] if img else '/static/autino_logo.png'
-            })
-    return results
-
-
-def search_vaartland():
-    url = "https://www.vaartland.nl/voorraad"
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
-    results = []
-    for card in soup.select("div.vehicle-card")[:10]:
-        title = card.select_one(".vehicle-card__title")
-        price = card.select_one(".vehicle-card__price")
-        km = card.select_one(".vehicle-card__mileage")
-        link = card.select_one("a")
-        img = card.select_one("img")
-        if title and price and km and link:
-            results.append({
-                'title': title.text.strip(),
-                'price': price.text.strip(),
-                'km': km.text.strip(),
-                'url': "https://www.vaartland.nl" + link['href'],
-                'img': img['src'] if img and 'src' in img.attrs else '/static/autino_logo.png'
-            })
-    return results
-
-def search_volvo():
-    url = 'https://selekt.volvocars.nl/nl-nl/store/'
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    results = []
-    for card in soup.select('div.result')[:10]:
-        title = card.select_one('.title')
-        price = card.select_one('.price')
-        km = card.select_one('.mileage')
-        link = card.select_one('a')
-        img = card.select_one('img')
-        if title and price and km and link:
-            results.append({
-                'title': title.text.strip(),
-                'price': price.text.strip(),
-                'km': km.text.strip(),
-                'url': 'https://selekt.volvocars.nl' + link['href'],
-                'img': img['src'] if img else '/static/autino_logo.png'
-            })
-    return results
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def index():
-    results = []
-    if request.method == 'POST':
-        q1 = request.form.get('q1', '')
-        q2 = request.form.get('q2', '')
-        q3 = request.form.get('q3', '')
-        query = request.form['query']
-        filters = extract_filters(query)
-        all_cars = search_broekhuis() + search_volvo() + search_vaartland()
-        results = apply_filters(all_cars, filters) if filters else all_cars
-    return render_template_string(HTML_TEMPLATE, results=results, filters=filters if 'filters' in locals() else {})
+    if "messages" not in session:
+        session["messages"] = START_PROMPT.copy()
 
-if __name__ == '__main__':
+    messages = session["messages"]
+
+    if request.method == "POST":
+        user_input = request.form.get("message", "")
+        messages.append({"role": "user", "content": user_input})
+
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=messages,
+                temperature=0.7,
+            )
+            
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=messages,
+                temperature=0.7,
+            )
+            reply = response["choices"][0]["message"]["content"]
+            messages.append({"role": "assistant", "content": reply})
+            try:
+                if "{" in reply:
+                    filters = eval(reply.strip().split('\n')[-1])
+                    results = mock_scraper(filters)
+                else:
+                    results = []
+            except:
+                results = []
+
+        except Exception as e:
+            messages.append({"role": "assistant", "content": f"Er ging iets mis met de AI: {e}"})
+
+        session["messages"] = messages
+
+    return render_template_string(HTML_TEMPLATE, messages=messages, results=results if "results" in locals() else [])
+
+if __name__ == "__main__":
     app.run(debug=True)
+
+
+
+def mock_scraper(filters):
+    # Simuleer dat we op basis van filters auto's tonen
+    voorbeeld_auto = {
+        "title": "Volvo XC40 Recharge",
+        "price": "€47.950",
+        "km": "35.000 km",
+        "url": "https://voorbeeld.autino.nl/volvo-xc40",
+    }
+    return [voorbeeld_auto] if filters else []
