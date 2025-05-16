@@ -125,20 +125,27 @@ def rank_autos(user_description, cars):
     try:
         
         
+        
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {
                     "role": "system",
-                    "content": "Je bent een AI die op basis van een gebruikersvraag de top 5 best passende auto's selecteert uit een lijst."
+                    "content": "Je bent een AI die auto's matcht op basis van een gebruikersbeschrijving. Je kiest de top 5 beste auto's uit een lijst van titels en omschrijvingen."
                 },
                 {
                     "role": "user",
-                    "content": f"De gebruiker zoekt een auto voor deze situatie: {user_description}\n\nHier zijn de beschikbare auto's:\n" + "\n".join(descriptions) + "\n\nNoem de titels van de 5 best passende auto's."
+                    "content": f"""Gebruiker zoekt: {user_description}
+
+Hier zijn de beschikbare auto's:
+{chr(10).join(descriptions)}
+
+Geef een lijst van de 5 best passende titels."""
                 }
             ],
             temperature=0.3
         )
+
 }
 
 Geef een lijst van de 5 beste titels."""}
