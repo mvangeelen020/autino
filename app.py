@@ -39,9 +39,9 @@ HTML_TEMPLATE = """
         <h2>Beste matches voor jouw situatie</h2>
         {% for car in results %}
             <div class="car">
-                <strong>{{ car.title }}</strong><br>
-                {{ car.price }} – {{ car.km }}<br>
-                <a href="{{ car.url }}" target="_blank">Bekijk</a>
+                <strong>{{ car.get('title', '') }}</strong><br>
+                {{ car.get('price', '') }} – {{ car.get('km', '') }}<br>
+                <a href="{{ car.get('url', '#') }}" target="_blank">Bekijk</a>
             </div>
         {% endfor %}
     {% endif %}
@@ -52,7 +52,10 @@ HTML_TEMPLATE = """
 
 def get_broekhuis():
     url = 'https://www.broekhuis.nl/volvo/occasions/volvo-selekt'
-    r = requests.get(url)
+    try:
+        r = requests.get(url, timeout=10)
+        except:
+        return []
     soup = BeautifulSoup(r.text, 'html.parser')
     results = []
     for card in soup.select('div.vehicle')[:10]:
@@ -72,7 +75,10 @@ def get_broekhuis():
 
 def get_volvo():
     url = 'https://selekt.volvocars.nl/nl-nl/store/'
-    r = requests.get(url)
+    try:
+        r = requests.get(url, timeout=10)
+        except:
+        return []
     soup = BeautifulSoup(r.text, 'html.parser')
     results = []
     for card in soup.select('div.result')[:10]:
@@ -92,7 +98,10 @@ def get_volvo():
 
 def get_voorraad():
     url = "https://www.vaartland.nl/voorraad"
-    r = requests.get(url)
+    try:
+        r = requests.get(url, timeout=10)
+        except:
+        return []
     soup = BeautifulSoup(r.text, "html.parser")
     results = []
     for card in soup.select("div.vehicle-card")[:20]:
@@ -114,19 +123,29 @@ def get_voorraad():
 def rank_autos(user_description, cars):
     descriptions = [f"{car['title']}: {car['description']}" for car in cars]
     try:
+        
+        
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Je bent een AI die de top 10 auto's kiest op basis van relevantie voor de omschrijving van een gebruiker."},
-                {"role": "user", "content": f"Gebruiker zoekt: {user_description}
+                {
+                    "role": "system",
+                    "content": "Je bent een AI die op basis van een gebruikersvraag de top 5 best passende auto's selecteert uit een lijst."
+                },
+                {
+                    "role": "user",
+                    "content": f"De gebruiker zoekt een auto voor deze situatie: {user_description}\n\nHier zijn de beschikbare auto's:\n" + "\n".join(descriptions) + "\n\nNoem de titels van de 5 best passende auto's."
+                }
+            ],
+            temperature=0.3
+        )
+}
 
-Auto's:
-" + "\n".join(descriptions) + "
-
-Geef een lijst van de 5 beste titels."}
+Geef een lijst van de 5 beste titels."""}
             ],
             temperature=0.2
         )
+
         top_titles = response["choices"][0]["message"]["content"].split("\n")
         return [car for car in cars if any(title.strip().lower() in car['title'].lower() for title in top_titles)]
     except Exception as e:
