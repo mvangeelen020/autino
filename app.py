@@ -1,3 +1,11 @@
+
+START_MESSAGES = [
+    {"role": "assistant", "content": "Welkom bij Autino! Ik help je de perfecte auto vinden."},
+    {"role": "assistant", "content": "Waarvoor wil je de auto vooral gebruiken? (bijv. werk, gezin, lange ritten)"},
+    {"role": "assistant", "content": "Heb je voorkeur voor een bepaald merk, brandstof of transmissie?"},
+    {"role": "assistant", "content": "Wat is je maximale budget of kilometerstand?"}
+]
+
 import os
 from flask import Flask, request, render_template_string, session, redirect, url_for
 import openai
@@ -160,6 +168,8 @@ Geef een lijst van de 5 best passende titels."""
 @app.route("/", methods=["GET", "POST"])
 def index():
     if "messages" not in session:
+        session["messages"] = START_MESSAGES.copy()
+    
         session["messages"] = []
 
     messages = session["messages"]
@@ -170,7 +180,7 @@ def index():
         messages.append({"role": "user", "content": message})
         voorraad = get_all_autos()
         results = rank_autos(message, voorraad)
-        messages.append({"role": "assistant", "content": "Ik heb auto's geselecteerd die het beste bij je beschrijving passen."})
+        messages.append({"role": "assistant", "content": "Hieronder zie je de 5 auto's die het beste bij je wensen passen."})
 
     session["messages"] = messages
     return render_template_string(HTML_TEMPLATE, messages=messages, results=results)
