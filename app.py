@@ -1,11 +1,3 @@
-
-START_MESSAGES = [
-    {"role": "assistant", "content": "Welkom bij Autino! Ik help je de perfecte auto vinden."},
-    {"role": "assistant", "content": "Waarvoor wil je de auto vooral gebruiken? (bijv. werk, gezin, lange ritten)"},
-    {"role": "assistant", "content": "Heb je voorkeur voor een bepaald merk, brandstof of transmissie?"},
-    {"role": "assistant", "content": "Wat is je maximale budget of kilometerstand?"}
-]
-
 import os
 from flask import Flask, request, render_template_string, session, redirect, url_for
 import openai
@@ -38,9 +30,9 @@ HTML_TEMPLATE = """
         <form method="POST" action="/">
             <a href="/reset" class="reset-link">Reset gesprek</a>
             {% for m in messages %}
-                <p><strong>{{ m.role.capitalize() }}:</strong> {{ m.content }}</p>
+                <p><strong>{% if m.role == 'assistant' %}Martino{% else %}{{ m.role.capitalize() }}{% endif %}:</strong> {{ m.content }}</p>
             {% endfor %}
-            <input type="text" name="message" style="width: 100%; padding: 10px;" placeholder="Waarvoor zoek je een auto?" required />
+            <input type="text" name="message" style="width: 100%; padding: 10px;" placeholder="Typ hier je antwoord..." required />
             <button type="submit" style="margin-top: 10px;">Verstuur</button>
         </form>
     </div>
@@ -58,6 +50,11 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+
+INTRO_PROMPT = [
+    {"role": "system", "content": "Je bent Martino, een slimme AI-autoassistent. Stel maximaal 5 vragen om te begrijpen wat voor auto de gebruiker nodig heeft. Zodra je genoeg weet, zeg dan: 'Dank je, ik zoek de best passende auto's voor je op.' en geef geen extra vragen meer."},
+    {"role": "assistant", "content": "Welkom bij Autino! Ik ben Martino. Waarvoor zoek je een auto?"}
+]
 
 def get_all_autos():
     all_results = []
@@ -145,7 +142,7 @@ def rank_autos(user_description, cars):
             messages=[
                 {
                     "role": "system",
-                    "content": "Je bent een AI die auto's matcht op basis van een gebruikersbeschrijving. Je kiest de top 5 beste auto's uit een lijst van titels en omschrijvingen."
+                    "content": "Je bent een AI die auto's selecteert op basis van een gebruikersbeschrijving. Kies de top 5 auto's uit deze lijst die het beste passen."
                 },
                 {
                     "role": "user",
@@ -154,40 +151,60 @@ def rank_autos(user_description, cars):
 Hier zijn de beschikbare auto's:
 {chr(10).join(descriptions)}
 
-Geef een lijst van de 5 best passende titels."""
+Noem de titels van de 5 beste auto's."""
                 }
             ],
             temperature=0.3
         )
         top_titles = response["choices"][0]["message"]["content"].split("\n")
-        return [car for car in cars if any(title.strip().lower() in car['title'].lower() for title in top_titles)]
+        matches = [car for car in cars if any(title.strip().lower() in car['title'].lower() for title in top_titles)]
+        return matches if matches else cars[:5]
     except Exception as e:
-        print("Ranking error:", e)
+        print("GPT matching error:", e)
         return cars[:5]
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if "messages" not in session:
-        session["messages"] = START_MESSAGES.copy()
-    
-        session["messages"] = []
+        session["messages"] = INTRO_PROMPT.copy()
+        session["question_count"] = 0
+        session["gathering"] = True
+        session["collected_info"] = ""
 
     messages = session["messages"]
+    question_count = session.get("question_count", 0)
+    gathering = session.get("gathering", True)
     results = []
 
     if request.method == "POST":
-        message = request.form.get("message", "")
-        messages.append({"role": "user", "content": message})
-        voorraad = get_all_autos()
-        results = rank_autos(message, voorraad)
-        messages.append({"role": "assistant", "content": "Hieronder zie je de 5 auto's die het beste bij je wensen passen."})
+        user_input = request.form.get("message", "")
+        messages.append({"role": "user", "content": user_input})
+        session["collected_info"] += " " + user_input
+
+        if gathering and question_count < 5:
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=messages,
+                temperature=0.5
+            )
+            reply = response["choices"][0]["message"]["content"]
+            messages.append({"role": "assistant", "content": reply})
+            session["question_count"] += 1
+
+            if "ik zoek de best passende auto's" in reply.lower() or session["question_count"] >= 5:
+                session["gathering"] = False
+                voorraad = get_all_autos()
+                results = rank_autos(session["collected_info"], voorraad)
+        else:
+            voorraad = get_all_autos()
+            results = rank_autos(session["collected_info"], voorraad)
 
     session["messages"] = messages
     return render_template_string(HTML_TEMPLATE, messages=messages, results=results)
 
 @app.route("/reset")
 def reset():
-    session.pop("messages", None)
+    session.clear()
     return redirect(url_for("index"))
 
 if __name__ == "__main__":
