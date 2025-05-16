@@ -179,7 +179,7 @@ def index():
     if request.method == "POST":
         user_input = request.form.get("message", "")
         messages.append({"role": "user", "content": user_input})
-                session["collected_info"] = session.get("collected_info", "") + " " + user_input
+        session["collected_info"] = session.get("collected_info", "") + " " + user_input
 
         if gathering and question_count < 5:
             response = openai.ChatCompletion.create(
