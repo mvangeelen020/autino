@@ -1,6 +1,6 @@
 flask
-python-dotenv
+openai==0.28.1
 requests
 beautifulsoup4
+python-dotenv
 gunicorn
-openai==0.28.1
