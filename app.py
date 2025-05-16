@@ -27,7 +27,7 @@ HTML_TEMPLATE = """
 <body>
     <h1>Autino – Slimme Autozoeker</h1>
     <div class="chat-box">
-        <form method="post">
+        <form method="POST" action="/">
             <a href="/reset" class="reset-link">Reset gesprek</a>
             {% for m in messages %}
                 <p><strong>{{ m.role.capitalize() }}:</strong> {{ m.content }}</p>
